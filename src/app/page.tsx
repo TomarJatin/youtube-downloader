@@ -8,65 +8,33 @@ import { Button } from "@/components/ui/button";
 import { Toaster, toast } from "sonner";
 import { Loader2, Download } from "lucide-react";
 
-interface VideoInfo {
-  title: string;
-  thumbnail: string;
-  duration: number;
-  format: {
-    format_id: string;
-    ext: string;
-    resolution: string;
-    filesize: number;
-    format_note: string;
-  };
-}
-
 export default function Home() {
   const [videoLink, setVideoLink] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
-  const handleProcessVideo = async () => {
+  const handleDownload = async () => {
     if (!videoLink) return;
     
     setIsLoading(true);
     try {
-      const response = await axios.get(`/api/downloader?url=${encodeURIComponent(videoLink)}`);
-      setVideoInfo(response.data);
+      // First get video info to determine the best format
+      const infoResponse = await axios.get(`/api/downloader?url=${encodeURIComponent(videoLink)}`);
+      const format = infoResponse.data.format.format_id;
+
+      // Then download and upload to S3
+      const downloadResponse = await axios.post('/api/download', {
+        url: videoLink,
+        format
+      });
+
+      setVideoUrl(downloadResponse.data.videoUrl);
       toast.success("Video processed successfully!");
     } catch (error) {
       console.error(error);
       toast.error("Failed to process video. Please check the URL and try again.");
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleDownload = async () => {
-    if (!videoInfo || !videoLink) return;
-    
-    setIsDownloading(true);
-    try {
-      const response = await axios.post('/api/download', {
-        url: videoLink,
-        format: videoInfo.format.format_id
-      });
-      
-      // Create a temporary link to trigger the download
-      const link = document.createElement('a');
-      link.href = `/downloads/${response.data.filePath.split('/').pop()}`;
-      link.download = '';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      toast.success("Download started!");
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to download video. Please try again.");
-    } finally {
-      setIsDownloading(false);
     }
   };
 
@@ -105,7 +73,7 @@ export default function Home() {
                 className="flex-1"
               />
               <Button 
-                onClick={handleProcessVideo} 
+                onClick={handleDownload} 
                 disabled={!videoLink || isLoading}
                 className="w-full md:w-auto"
               >
@@ -117,7 +85,7 @@ export default function Home() {
                 ) : (
                   <>
                     <Download className="mr-2 h-4 w-4" />
-                    Process Video
+                    Download
                   </>
                 )}
               </Button>
@@ -125,43 +93,27 @@ export default function Home() {
           </CardContent>
         </Card>
 
-        {videoInfo && (
+        {videoUrl && (
           <Card className="w-full">
             <CardHeader>
               <CardTitle>Video Ready</CardTitle>
-              <CardDescription>Your video is ready to download</CardDescription>
+              <CardDescription>Your video is ready to watch</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="aspect-video relative rounded-lg overflow-hidden">
-                  <img
-                    src={videoInfo.thumbnail}
-                    alt={videoInfo.title}
-                    className="object-cover w-full h-full"
-                  />
-                </div>
-                <h3 className="text-lg font-semibold">{videoInfo.title}</h3>
-                <div className="text-sm text-gray-500">
-                  <p>Format: {videoInfo.format.format_note}</p>
-                  <p>Resolution: {videoInfo.format.resolution}</p>
-                  <p>Duration: {Math.floor(videoInfo.duration / 60)}:{(videoInfo.duration % 60).toString().padStart(2, '0')}</p>
-                </div>
+                <video 
+                  src={videoUrl} 
+                  controls 
+                  className="w-full rounded-lg"
+                />
                 <Button 
-                  onClick={handleDownload}
-                  disabled={isDownloading}
+                  asChild 
                   className="w-full"
                 >
-                  {isDownloading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Downloading...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="mr-2 h-4 w-4" />
-                      Download Video
-                    </>
-                  )}
+                  <a href={videoUrl} download target="_blank" rel="noopener noreferrer">
+                    <Download className="mr-2 h-4 w-4" />
+                    Download Video
+                  </a>
                 </Button>
               </div>
             </CardContent>

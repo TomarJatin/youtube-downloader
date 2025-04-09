@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { downloadVideo } from "@/utils/ytdlp";
+import { uploadToS3 } from "@/utils/s3";
 import path from "path";
 
 export async function POST(request: NextRequest) {
@@ -15,12 +16,15 @@ export async function POST(request: NextRequest) {
         // Create downloads directory in the project root
         const outputDir = path.join(process.cwd(), 'downloads');
         
-        // Download the video
+        // Download the video locally
         const outputPath = await downloadVideo(url, format, outputDir);
+
+        // Upload to S3 and get the public URL
+        const videoUrl = await uploadToS3(outputPath);
 
         return NextResponse.json({
             success: true,
-            filePath: outputPath
+            videoUrl
         });
     } catch (error) {
         console.error('Download error:', error);
